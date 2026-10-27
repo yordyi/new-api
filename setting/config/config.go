@@ -2,16 +2,17 @@ package config
 
 import (
 	"encoding/json"
-	"one-api/common"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 // ConfigManager 统一管理所有配置
 type ConfigManager struct {
-	configs map[string]interface{}
+	configs map[string]any
 	mutex   sync.RWMutex
 }
 
@@ -19,19 +20,19 @@ var GlobalConfig = NewConfigManager()
 
 func NewConfigManager() *ConfigManager {
 	return &ConfigManager{
-		configs: make(map[string]interface{}),
+		configs: make(map[string]any),
 	}
 }
 
 // Register 注册一个配置模块
-func (cm *ConfigManager) Register(name string, config interface{}) {
+func (cm *ConfigManager) Register(name string, config any) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
 	cm.configs[name] = config
 }
 
 // Get 获取指定配置模块
-func (cm *ConfigManager) Get(name string) interface{} {
+func (cm *ConfigManager) Get(name string) any {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 	return cm.configs[name]
@@ -48,8 +49,8 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 
 		// 收集属于此配置的所有选项
 		for key, value := range options {
-			if strings.HasPrefix(key, prefix) {
-				configKey := strings.TrimPrefix(key, prefix)
+			if after, ok := strings.CutPrefix(key, prefix); ok {
+				configKey := after
 				configMap[configKey] = value
 			}
 		}
@@ -57,7 +58,7 @@ func (cm *ConfigManager) LoadFromDB(options map[string]string) error {
 		// 如果找到配置项，则更新配置
 		if len(configMap) > 0 {
 			if err := updateConfigFromMap(config, configMap); err != nil {
-				common.SysError("failed to update config " + name + ": " + err.Error())
+				common.SysError(common.LogText("failed to update config %s: %s", name, err.Error()))
 				continue
 			}
 		}
@@ -89,11 +90,11 @@ func (cm *ConfigManager) SaveToDB(updateFunc func(key, value string) error) erro
 }
 
 // 辅助函数：将配置对象转换为map
-func configToMap(config interface{}) (map[string]string, error) {
+func configToMap(config any) (map[string]string, error) {
 	result := make(map[string]string)
 
 	val := reflect.ValueOf(config)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 
@@ -130,6 +131,18 @@ func configToMap(config interface{}) (map[string]string, error) {
 			strValue = strconv.FormatUint(field.Uint(), 10)
 		case reflect.Float32, reflect.Float64:
 			strValue = strconv.FormatFloat(field.Float(), 'f', -1, 64)
+		case reflect.Pointer:
+			// 处理指针类型：如果非 nil，序列化指向的值
+			if !field.IsNil() {
+				bytes, err := json.Marshal(field.Interface())
+				if err != nil {
+					return nil, err
+				}
+				strValue = string(bytes)
+			} else {
+				// nil 指针序列化为 "null"
+				strValue = "null"
+			}
 		case reflect.Map, reflect.Slice, reflect.Struct:
 			// 复杂类型使用JSON序列化
 			bytes, err := json.Marshal(field.Interface())
@@ -149,9 +162,9 @@ func configToMap(config interface{}) (map[string]string, error) {
 }
 
 // 辅助函数：从map更新配置对象
-func updateConfigFromMap(config interface{}, configMap map[string]string) error {
+func updateConfigFromMap(config any, configMap map[string]string) error {
 	val := reflect.ValueOf(config)
-	if val.Kind() != reflect.Ptr {
+	if val.Kind() != reflect.Pointer {
 		return nil
 	}
 	val = val.Elem()
@@ -199,13 +212,23 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			intValue, err := strconv.ParseInt(strValue, 10, 64)
 			if err != nil {
-				continue
+				// 兼容 float 格式的字符串（如 "2.000000"）
+				floatValue, fErr := strconv.ParseFloat(strValue, 64)
+				if fErr != nil {
+					continue
+				}
+				intValue = int64(floatValue)
 			}
 			field.SetInt(intValue)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			uintValue, err := strconv.ParseUint(strValue, 10, 64)
 			if err != nil {
-				continue
+				// 兼容 float 格式的字符串
+				floatValue, fErr := strconv.ParseFloat(strValue, 64)
+				if fErr != nil || floatValue < 0 {
+					continue
+				}
+				uintValue = uint64(floatValue)
 			}
 			field.SetUint(uintValue)
 		case reflect.Float32, reflect.Float64:
@@ -214,8 +237,31 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 				continue
 			}
 			field.SetFloat(floatValue)
-		case reflect.Map, reflect.Slice, reflect.Struct:
-			// 复杂类型使用JSON反序列化
+		case reflect.Pointer:
+			// 处理指针类型
+			if strValue == "null" {
+				field.Set(reflect.Zero(field.Type()))
+			} else {
+				// 如果指针是 nil，需要先初始化
+				if field.IsNil() {
+					field.Set(reflect.New(field.Type().Elem()))
+				}
+				// 反序列化到指针指向的值
+				err := json.Unmarshal([]byte(strValue), field.Interface())
+				if err != nil {
+					continue
+				}
+			}
+		case reflect.Map:
+			// json.Unmarshal merges into existing maps (keeps old keys that are
+			// absent from the new JSON). Allocate a fresh map so removed keys
+			// are properly cleared.
+			fresh := reflect.New(field.Type())
+			if err := json.Unmarshal([]byte(strValue), fresh.Interface()); err != nil {
+				continue
+			}
+			field.Set(fresh.Elem())
+		case reflect.Slice, reflect.Struct:
 			err := json.Unmarshal([]byte(strValue), field.Addr().Interface())
 			if err != nil {
 				continue
@@ -227,12 +273,12 @@ func updateConfigFromMap(config interface{}, configMap map[string]string) error 
 }
 
 // ConfigToMap 将配置对象转换为map（导出函数）
-func ConfigToMap(config interface{}) (map[string]string, error) {
+func ConfigToMap(config any) (map[string]string, error) {
 	return configToMap(config)
 }
 
 // UpdateConfigFromMap 从map更新配置对象（导出函数）
-func UpdateConfigFromMap(config interface{}, configMap map[string]string) error {
+func UpdateConfigFromMap(config any, configMap map[string]string) error {
 	return updateConfigFromMap(config, configMap)
 }
 

@@ -4,9 +4,11 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"one-api/common"
+	"strings"
 	"sync"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/go-redis/redis/v8"
 )
 
 //go:embed lua/rate_limit.lua
@@ -27,7 +29,7 @@ func New(ctx context.Context, r *redis.Client) *RedisLimiter {
 		// 预加载脚本
 		limitSHA, err := r.ScriptLoad(ctx, rateLimitScript).Result()
 		if err != nil {
-			common.SysLog(fmt.Sprintf("Failed to load rate limit script: %v", err))
+			common.SysLog(common.LogText("Failed to load rate limit script: %v", err))
 		}
 		instance = &RedisLimiter{
 			client:         r,
@@ -62,6 +64,20 @@ func (rl *RedisLimiter) Allow(ctx context.Context, key string, opts ...Option) (
 	).Int()
 
 	if err != nil {
+		if strings.HasPrefix(err.Error(), "NOSCRIPT ") {
+			result, err := rl.client.Eval(
+				ctx,
+				rateLimitScript,
+				[]string{key},
+				config.Requested,
+				config.Rate,
+				config.Capacity,
+			).Int()
+			if err != nil {
+				return false, fmt.Errorf("rate limit failed: %w", err)
+			}
+			return result == 1, nil
+		}
 		return false, fmt.Errorf("rate limit failed: %w", err)
 	}
 	return result == 1, nil

@@ -8,23 +8,29 @@ import (
 	"image"
 	"io"
 	"net/http"
-	"one-api/common"
-	"one-api/constant"
 	"strings"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 
 	"golang.org/x/image/webp"
 )
 
+// return image.Config, format, clean base64 string, error
 func DecodeBase64ImageData(base64String string) (image.Config, string, string, error) {
 	// 去除base64数据的URL前缀（如果有）
 	if idx := strings.Index(base64String, ","); idx != -1 {
 		base64String = base64String[idx+1:]
 	}
 
+	if len(base64String) == 0 {
+		return image.Config{}, "", "", errors.New("base64 string is empty")
+	}
+
 	// 将base64字符串解码为字节切片
 	decodedData, err := base64.StdEncoding.DecodeString(base64String)
 	if err != nil {
-		fmt.Println("Error: Failed to decode base64 string")
+		fmt.Println(common.LogText("Error: Failed to decode base64 string"))
 		return image.Config{}, "", "", fmt.Errorf("failed to decode base64 string: %s", err.Error())
 	}
 
@@ -113,7 +119,7 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
 	response, err := DoDownloadRequest(imageUrl)
 	if err != nil {
-		common.SysLog(fmt.Sprintf("fail to get image from url: %s", err.Error()))
+		common.SysLog(common.LogText("fail to get image from url: %s", err.Error()))
 		return image.Config{}, "", err
 	}
 	defer response.Body.Close()
@@ -131,7 +137,7 @@ func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
 
 	var readData []byte
 	for _, limit := range []int64{1024 * 8, 1024 * 24, 1024 * 64} {
-		common.SysLog(fmt.Sprintf("try to decode image config with limit: %d", limit))
+		common.SysLog(common.LogText("try to decode image config with limit: %d", limit))
 
 		// 从response.Body读取更多的数据直到达到当前的限制
 		additionalData := make([]byte, limit-int64(len(readData)))
@@ -153,20 +159,36 @@ func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
 }
 
 func getImageConfig(reader io.Reader) (image.Config, string, error) {
+	// Read all data so we can retry with different decoders
+	data, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		return image.Config{}, "", fmt.Errorf("failed to read image data: %w", readErr)
+	}
+
 	// 读取图片的头部信息来获取图片尺寸
-	config, format, err := image.DecodeConfig(reader)
-	if err != nil {
-		err = errors.New(fmt.Sprintf("fail to decode image config(gif, jpg, png): %s", err.Error()))
-		common.SysLog(err.Error())
-		config, err = webp.DecodeConfig(reader)
-		if err != nil {
-			err = errors.New(fmt.Sprintf("fail to decode image config(webp): %s", err.Error()))
-			common.SysLog(err.Error())
+	config, format, err := image.DecodeConfig(bytes.NewReader(data))
+	if err == nil {
+		return config, format, nil
+	}
+	common.SysLog(common.LogText("fail to decode image config(gif, jpg, png): %s", err.Error()))
+
+	config, err = webp.DecodeConfig(bytes.NewReader(data))
+	if err == nil {
+		return config, "webp", nil
+	}
+	common.SysLog(common.LogText("fail to decode image config(webp): %s", err.Error()))
+
+	// Try HEIF/HEIC: parse ISOBMFF ispe box for dimensions
+	if heifMime := detectHEIF(data); heifMime != "" {
+		formatName := "heif"
+		if heifMime == "image/heic" {
+			formatName = "heic"
 		}
-		format = "webp"
+		if w, h, ok := parseHEIFDimensions(data); ok {
+			return image.Config{Width: w, Height: h}, formatName, nil
+		}
+		return image.Config{}, "", fmt.Errorf("failed to decode HEIF/HEIC image dimensions")
 	}
-	if err != nil {
-		return image.Config{}, "", err
-	}
-	return config, format, nil
+
+	return image.Config{}, "", err
 }

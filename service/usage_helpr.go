@@ -1,7 +1,11 @@
 package service
 
 import (
-	"one-api/dto"
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/tokenkit"
+	"github.com/gin-gonic/gin"
 )
 
 //func GetPromptTokens(textRequest dto.GeneralOpenAIRequest, relayMode int) (int, error) {
@@ -16,13 +20,13 @@ import (
 //	return 0, errors.New("unknown relay mode")
 //}
 
-func ResponseText2Usage(responseText string, modeName string, promptTokens int) (*dto.Usage, error) {
+func ResponseText2Usage(c *gin.Context, responseText string, modeName string, promptTokens int) *dto.Usage {
+	common.SetContextKey(c, constant.ContextKeyLocalCountTokens, true)
 	usage := &dto.Usage{}
 	usage.PromptTokens = promptTokens
-	ctkm, err := CountTextToken(responseText, modeName)
-	usage.CompletionTokens = ctkm
+	usage.CompletionTokens = tokenkit.Estimate(modeName, responseText)
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-	return usage, err
+	return usage
 }
 
 func ValidUsage(usage *dto.Usage) bool {

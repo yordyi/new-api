@@ -5,21 +5,23 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"one-api/dto"
-	"one-api/setting"
+	"strings"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 )
 
 // WebhookPayload webhook 通知的负载数据
 type WebhookPayload struct {
-	Type      string        `json:"type"`
-	Title     string        `json:"title"`
-	Content   string        `json:"content"`
-	Values    []interface{} `json:"values,omitempty"`
-	Timestamp int64         `json:"timestamp"`
+	Type      string `json:"type"`
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	Values    []any  `json:"values,omitempty"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 // generateSignature 生成 webhook 签名
@@ -34,7 +36,7 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 	// 处理占位符
 	content := data.Content
 	for _, value := range data.Values {
-		content = fmt.Sprintf(content, value)
+		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
 
 	// 构建 webhook 负载
@@ -47,7 +49,7 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 	}
 
 	// 序列化负载
-	payloadBytes, err := json.Marshal(payload)
+	payloadBytes, err := common.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal webhook payload: %v", err)
 	}
@@ -56,11 +58,11 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 	var req *http.Request
 	var resp *http.Response
 
-	if setting.EnableWorker() {
+	if system_setting.EnableWorker() {
 		// 构建worker请求数据
 		workerReq := &WorkerRequest{
 			URL:    webhookURL,
-			Key:    setting.WorkerValidKey,
+			Key:    system_setting.WorkerValidKey,
 			Method: http.MethodPost,
 			Headers: map[string]string{
 				"Content-Type": "application/json",
@@ -86,6 +88,11 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 			return fmt.Errorf("webhook request failed with status code: %d", resp.StatusCode)
 		}
 	} else {
+		// SSRF防护：验证Webhook URL（非Worker模式）
+		if err := ValidateSSRFProtectedFetchURL(webhookURL); err != nil {
+			return fmt.Errorf("request reject: %v", err)
+		}
+
 		req, err = http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(payloadBytes))
 		if err != nil {
 			return fmt.Errorf("failed to create webhook request: %v", err)
@@ -101,7 +108,7 @@ func SendWebhookNotify(webhookURL string, secret string, data dto.Notify) error 
 		}
 
 		// 发送请求
-		client := GetImpatientHttpClient()
+		client := GetSSRFProtectedHTTPClient()
 		resp, err = client.Do(req)
 		if err != nil {
 			return fmt.Errorf("failed to send webhook request: %v", err)

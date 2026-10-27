@@ -1,6 +1,6 @@
 package palm
 
-import "one-api/dto"
+import "github.com/QuantumNous/new-api/relaykit/dto"
 
 type PaLMChatMessage struct {
 	Author  string `json:"author"`

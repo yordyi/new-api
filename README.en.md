@@ -1,15 +1,18 @@
-<p align="right">
-   <a href="./README.md">中文</a> | <strong>English</strong>
-</p>
 <div align="center">
 
 ![new-api](/web/public/logo.png)
 
 # New API
 
-🍥 Next-Generation Large Model Gateway and AI Asset Management System
+**An AI gateway for models, applications, and agents**
 
-<a href="https://trendshift.io/repositories/8227" target="_blank"><img src="https://trendshift.io/api/badge/repositories/8227" alt="Calcium-Ion%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+<p align="center">
+  <a href="./README.zh_CN.md">简体中文</a> |
+  <a href="./README.zh_TW.md">繁體中文</a> |
+  <strong>English</strong> |
+  <a href="./README.fr.md">Français</a> |
+  <a href="./README.ja.md">日本語</a>
+</p>
 
 <p align="center">
   <a href="https://raw.githubusercontent.com/Calcium-Ion/new-api/main/LICENSE">
@@ -24,171 +27,339 @@
   <a href="https://hub.docker.com/r/CalciumIon/new-api">
     <img src="https://img.shields.io/badge/docker-dockerHub-blue" alt="docker">
   </a>
-  <a href="https://goreportcard.com/report/github.com/Calcium-Ion/new-api">
-    <img src="https://goreportcard.com/badge/github.com/Calcium-Ion/new-api" alt="GoReportCard">
+  <a href="https://atomgit.com/QuantumNous/new-api" target="_blank">
+    <img alt="AtomGit G-Star" src="https://atomgit.com/QuantumNous/new-api/star/badge.svg"/>
   </a>
 </p>
+
+<p align="center">
+  <a href="https://trendshift.io/repositories/20180" target="_blank">
+    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
+  </a>
+  <br>
+  <a href="https://hellogithub.com/repository/QuantumNous/new-api" target="_blank">
+    <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
+  </a>
+  <a href="https://atomgit.com/QuantumNous/new-api" target="_blank">
+    <img alt="AtomGit G-Star" src="https://atomgit.com/QuantumNous/new-api/star/new_badge.svg" width="250" height="55" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#capabilities">Capabilities</a> •
+  <a href="#quick-start">Quick start</a> •
+  <a href="#deployment">Deployment</a> •
+  <a href="#development">Development</a> •
+  <a href="#documentation">Documentation</a>
+</p>
+
 </div>
+
+---
 
 ## 📝 Project Description
 
-> [!NOTE]  
+New API is a self-hosted AI gateway for applications, agents, and teams. Connect upstream model services, expose a consistent API to your clients, and manage routing, access, usage, and costs in one place.
+
+Use it to share authorized model access across a team, switch providers without configuring every client again, or operate a private multi-model service with a web console. Upstreams include OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Vertex AI, DeepSeek, Qwen, and other compatible services.
+
+> [!NOTE]
 > This is an open-source project developed based on [One API](https://github.com/songquanpeng/one-api)
 
-> [!IMPORTANT]  
-> - This project is for personal learning purposes only, with no guarantee of stability or technical support.
-> - Users must comply with OpenAI's [Terms of Use](https://openai.com/policies/terms-of-use) and **applicable laws and regulations**, and must not use it for illegal purposes.
-> - According to the [《Interim Measures for the Management of Generative Artificial Intelligence Services》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm), please do not provide any unregistered generative AI services to the public in China.
+<!-- -->
 
-## 📚 Documentation
+> [!IMPORTANT]
+> - This project is intended solely for lawful and authorized AI API gateway, organization-level authentication, multi-model management, usage analytics, cost accounting, and private deployment scenarios.
+> - Users must lawfully obtain upstream API keys, accounts, model services, and interface permissions, and must comply with upstream terms of service and applicable laws and regulations.
+> - Users should ensure their use complies with upstream terms of service and applicable laws and regulations.
+> - When providing generative AI services to the public, users should comply with applicable regulatory requirements and fulfill all filing, licensing, content safety, real-name verification, log retention, tax, and upstream authorization obligations required by their jurisdiction.
 
-For detailed documentation, please visit our official Wiki: [https://docs.newapi.pro/](https://docs.newapi.pro/)
+<!-- -->
 
-You can also access the AI-generated DeepWiki:
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/QuantumNous/new-api)
+> [!WARNING]
+> When operating this project as a public generative AI service or API resale service, users should first complete all required filing, licensing, content safety, real-name verification, log retention, tax, payment, and upstream authorization obligations.
 
-## ✨ Key Features
+---
 
-New API offers a wide range of features, please refer to [Features Introduction](https://docs.newapi.pro/wiki/features-introduction) for details:
+<a id="screenshots"></a>
 
-1. 🎨 Brand new UI interface
-2. 🌍 Multi-language support
-3. 💰 Online recharge functionality (YiPay)
-4. 🔍 Support for querying usage quotas with keys (works with [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool))
-5. 🔄 Compatible with the original One API database
-6. 💵 Support for pay-per-use model pricing
-7. ⚖️ Support for weighted random channel selection
-8. 📈 Data dashboard (console)
-9. 🔒 Token grouping and model restrictions
-10. 🤖 Support for more authorization login methods (LinuxDO, Telegram, OIDC)
-11. 🔄 Support for Rerank models (Cohere and Jina), [API Documentation](https://docs.newapi.pro/api/jinaai-rerank)
-12. ⚡ Support for OpenAI Realtime API (including Azure channels), [API Documentation](https://docs.newapi.pro/api/openai-realtime)
-13. ⚡ Support for Claude Messages format, [API Documentation](https://docs.newapi.pro/api/anthropic-chat)
-14. Support for entering chat interface via /chat2link route
-15. 🧠 Support for setting reasoning effort through model name suffixes:
-    1. OpenAI o-series models
-        - Add `-high` suffix for high reasoning effort (e.g.: `o3-mini-high`)
-        - Add `-medium` suffix for medium reasoning effort (e.g.: `o3-mini-medium`)
-        - Add `-low` suffix for low reasoning effort (e.g.: `o3-mini-low`)
-    2. Claude thinking models
-        - Add `-thinking` suffix to enable thinking mode (e.g.: `claude-3-7-sonnet-20250219-thinking`)
-16. 🔄 Thinking-to-content functionality
-17. 🔄 Model rate limiting for users
-18. 💰 Cache billing support, which allows billing at a set ratio when cache is hit:
-    1. Set the `Prompt Cache Ratio` option in `System Settings-Operation Settings`
-    2. Set `Prompt Cache Ratio` in the channel, range 0-1, e.g., setting to 0.5 means billing at 50% when cache is hit
-    3. Supported channels:
-        - [x] OpenAI
-        - [x] Azure
-        - [x] DeepSeek
-        - [x] Claude
+## Screenshots
 
-## Model Support
+Accounts, channels, plugin installation states, usage, prices, and costs shown below are simulated data. The marketplace displays the official plugin catalog. Click an image to view it at full size.
 
-This version supports multiple models, please refer to [API Documentation-Relay Interface](https://docs.newapi.pro/api) for details:
+| Usage dashboard | Plugin marketplace |
+| --- | --- |
+| [![Usage dashboard with simulated requests, costs, and performance metrics](assets/screenshots/dashboard.en.jpg)](assets/screenshots/dashboard.en.jpg) | [![Official plugin marketplace with simulated installation status](assets/screenshots/plugin-marketplace.en.jpg)](assets/screenshots/plugin-marketplace.en.jpg) |
+| **Model square** | **Usage logs** |
+| [![Model square with simulated model pricing and availability](assets/screenshots/models.en.jpg)](assets/screenshots/models.en.jpg) | [![Usage logs with simulated tokens, costs, and response times](assets/screenshots/usage-logs.en.jpg)](assets/screenshots/usage-logs.en.jpg) |
 
-1. Third-party models **gpts** (gpt-4-gizmo-*)
-2. Third-party channel [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) interface, [API Documentation](https://docs.newapi.pro/api/midjourney-proxy-image)
-3. Third-party channel [Suno API](https://github.com/Suno-API/Suno-API) interface, [API Documentation](https://docs.newapi.pro/api/suno-music)
-4. Custom channels, supporting full call address input
-5. Rerank models ([Cohere](https://cohere.ai/) and [Jina](https://jina.ai/)), [API Documentation](https://docs.newapi.pro/api/jinaai-rerank)
-6. Claude Messages format, [API Documentation](https://docs.newapi.pro/api/anthropic-chat)
-7. Dify, currently only supports chatflow
+---
 
-## Environment Variable Configuration
+## 🤝 Trusted Partners
 
-For detailed configuration instructions, please refer to [Installation Guide-Environment Variables Configuration](https://docs.newapi.pro/installation/environment-variables):
+<p align="center">
+  <em>No particular order</em>
+</p>
 
-- `GENERATE_DEFAULT_TOKEN`: Whether to generate initial tokens for newly registered users, default is `false`
-- `STREAMING_TIMEOUT`: Streaming response timeout, default is 60 seconds
-- `DIFY_DEBUG`: Whether to output workflow and node information for Dify channels, default is `true`
-- `FORCE_STREAM_OPTION`: Whether to override client stream_options parameter, default is `true`
-- `GET_MEDIA_TOKEN`: Whether to count image tokens, default is `true`
-- `GET_MEDIA_TOKEN_NOT_STREAM`: Whether to count image tokens in non-streaming cases, default is `true`
-- `UPDATE_TASK`: Whether to update asynchronous tasks (Midjourney, Suno), default is `true`
-- `COHERE_SAFETY_SETTING`: Cohere model safety settings, options are `NONE`, `CONTEXTUAL`, `STRICT`, default is `NONE`
-- `GEMINI_VISION_MAX_IMAGE_NUM`: Maximum number of images for Gemini models, default is `16`
-- `MAX_FILE_DOWNLOAD_MB`: Maximum file download size in MB, default is `20`
-- `CRYPTO_SECRET`: Encryption key used for encrypting database content
-- `AZURE_DEFAULT_API_VERSION`: Azure channel default API version, default is `2025-04-01-preview`
-- `NOTIFICATION_LIMIT_DURATION_MINUTE`: Notification limit duration, default is `10` minutes
-- `NOTIFY_LIMIT_COUNT`: Maximum number of user notifications within the specified duration, default is `2`
-- `ERROR_LOG_ENABLED=true`: Whether to record and display error logs, default is `false`
+<p align="center">
+  <a href="https://www.cherry-ai.com/" target="_blank">
+    <img src="./docs/images/cherry-studio.png" alt="Cherry Studio" height="80" />
+  </a>
+  <a href="https://bda.pku.edu.cn/" target="_blank">
+    <img src="./docs/images/pku.png" alt="Peking University" height="80" />
+  </a>
+  <a href="https://www.aliyun.com/" target="_blank">
+    <img src="./docs/images/aliyun.png" alt="Alibaba Cloud" height="80" />
+  </a>
+  <a href="https://io.net/" target="_blank">
+    <img src="./docs/images/io-net.png" alt="IO.NET" height="80" />
+  </a>
+</p>
+
+---
+
+## 🙏 Special Thanks
+
+<p align="center">
+  <a href="https://www.jetbrains.com/?from=new-api" target="_blank">
+    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" alt="JetBrains Logo" width="120" />
+  </a>
+</p>
+
+<p align="center">
+  <strong>Thanks to <a href="https://www.jetbrains.com/?from=new-api">JetBrains</a> for providing free open-source development license for this project</strong>
+</p>
+
+---
+
+<a id="capabilities"></a>
+
+## Capabilities
+
+| Area | What you can do |
+| --- | --- |
+| Model access | Use OpenAI Chat Completions, Responses, Anthropic Messages, and Gemini APIs; stream responses and use tools, reasoning, and multimodal inputs where supported |
+| Routing | Configure model mappings, channel priorities and weights, retries, channel affinity, and multiple upstream keys |
+| Usage and costs | Manage quotas, subscriptions, usage logs, cache accounting, and expression-based pricing for different usage tiers |
+| Access control | Manage users, groups, fine-grained permissions, and API key restrictions; use OAuth/OIDC, passkeys, two-factor authentication, and login session management |
+| Asynchronous tasks | Extend image, video, and other task APIs with JavaScript plugins, including task status and output retrieval |
+| Web console | Configure channels and models, inspect usage and audit logs, and try models in the playground; available in English, Simplified Chinese, Traditional Chinese, French, Japanese, Russian, and Vietnamese |
+
+### Protocols and endpoints
+
+| Interface | Common endpoints |
+| --- | --- |
+| OpenAI Chat / Responses | `POST /v1/chat/completions`, `POST /v1/responses` |
+| Anthropic Messages | `POST /v1/messages` |
+| Gemini | `POST /v1beta/models/{model}:generateContent`, `POST /v1beta/models/{model}:streamGenerateContent` |
+| Realtime / Responses WebSocket | `GET /v1/realtime`, `GET /v1/responses` (WebSocket upgrade) |
+| Images / audio | `/v1/images/generations`, `/v1/images/edits`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations` |
+| Embeddings / rerank | `POST /v1/embeddings`, `POST /v1/rerank` |
+| Task plugins | `POST /v1/tasks/{pluginKey}`, `GET /v1/tasks/{taskId}`, plus routes declared by each plugin |
+
+[RelayKit](./relaykit/README.md) provides request, response, and streaming conversion between the four text protocols. Available features depend on the channel, upstream model, and conversion path; protocol-specific tools and fields may not map exactly. WebSocket support also requires a compatible upstream and channel configuration.
+
+This README describes the current source tree. Check the release notes for the version you deploy.
+
+<a id="quick-start"></a>
+
+## Quick start
+
+### Try locally with Docker
+
+This starts a single instance with SQLite and binds it to localhost:
+
+```bash
+mkdir -p data
+docker run --name new-api -d --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 \
+  -e TZ=Asia/Shanghai \
+  -v "$(pwd)/data:/data" \
+  calciumion/new-api:latest
+```
+
+Open [http://localhost:3000](http://localhost:3000) and complete the setup wizard to create the administrator account. The `data` directory persists the SQLite database across container replacements.
+
+### Make your first request
+
+1. Add a channel with your upstream API key, available models, and group assignment; run a channel test.
+2. Configure model pricing and ensure the user has quota or a valid subscription.
+3. Create an API key in the console with access to the same group and models.
+4. Set your client's base URL to `http://localhost:3000/v1` for OpenAI-compatible clients and use the **New API-issued key**.
+
+Set `NEW_API_KEY` in your shell to that key. List the models accessible to it:
+
+```bash
+curl --fail-with-body http://localhost:3000/v1/models \
+  -H "Authorization: Bearer ${NEW_API_KEY}"
+```
+
+Then call Responses, replacing `your-enabled-model` with an enabled model that supports this interface:
+
+```bash
+curl --fail-with-body http://localhost:3000/v1/responses \
+  -H "Authorization: Bearer ${NEW_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"your-enabled-model","input":"Hello!"}'
+```
+
+<a id="deployment"></a>
 
 ## Deployment
 
-For detailed deployment guides, please refer to [Installation Guide-Deployment Methods](https://docs.newapi.pro/installation):
+### Docker Compose
 
-> [!TIP]
-> Latest Docker image: `calciumion/new-api:latest`
+The repository's [Compose configuration](./docker-compose.yml) starts **New API + PostgreSQL + Redis** by default. It also contains examples for MySQL and a separate ClickHouse log database.
 
-### Multi-machine Deployment Considerations
-- Environment variable `SESSION_SECRET` must be set, otherwise login status will be inconsistent across multiple machines
-- If sharing Redis, `CRYPTO_SECRET` must be set, otherwise Redis content cannot be accessed across multiple machines
-
-### Deployment Requirements
-- Local database (default): SQLite (Docker deployment must mount the `/data` directory)
-- Remote database: MySQL version >= 5.7.8, PgSQL version >= 9.6
-
-### Deployment Methods
-
-#### Using BaoTa Panel Docker Feature
-Install BaoTa Panel (version **9.2.0** or above), find **New-API** in the application store and install it.
-[Tutorial with images](./docs/BT.md)
-
-#### Using Docker Compose (Recommended)
-```shell
-# Download the project
-git clone https://github.com/Calcium-Ion/new-api.git
+```bash
+git clone https://github.com/QuantumNous/new-api.git
 cd new-api
-# Edit docker-compose.yml as needed
-# Start
-docker-compose up -d
 ```
 
-#### Using Docker Image Directly
-```shell
-# Using SQLite
-docker run --name new-api -d --restart always -p 3000:3000 -e TZ=Asia/Shanghai -v /home/ubuntu/data/new-api:/data calciumion/new-api:latest
+Before starting, edit `docker-compose.yml`: replace the database and Redis example passwords in both the services and connection strings, and set a persistent random `SESSION_SECRET` (generate one with `openssl rand -hex 32`). For an HTTPS console, configure `SESSION_COOKIE_SECURE=true` and `SESSION_COOKIE_TRUSTED_URL` with its exact public HTTPS origin.
 
-# Using MySQL
-docker run --name new-api -d --restart always -p 3000:3000 -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" -e TZ=Asia/Shanghai -v /home/ubuntu/data/new-api:/data calciumion/new-api:latest
+```bash
+docker compose up -d
+docker compose logs -f new-api
 ```
 
-## Channel Retry and Cache
-Channel retry functionality has been implemented, you can set the number of retries in `Settings->Operation Settings->General Settings`. It is **recommended to enable caching**.
+### Storage and configuration
 
-### Cache Configuration Method
-1. `REDIS_CONN_STRING`: Set Redis as cache
-2. `MEMORY_CACHE_ENABLED`: Enable memory cache (no need to set manually if Redis is set)
+| Component | Options |
+| --- | --- |
+| Main database | SQLite, MySQL ≥ 5.7.8, or PostgreSQL ≥ 9.6 |
+| Separate log database | Configure with `LOG_SQL_DSN`; also supports ClickHouse |
+| Cache | Optional Redis plus in-memory caching; use shared Redis when application nodes need shared rate limits |
+| Container platforms | Linux amd64 / arm64 |
 
-## API Documentation
+| Variable | Purpose |
+| --- | --- |
+| `SQL_DSN` | Main database connection; unset uses SQLite |
+| `LOG_SQL_DSN` | Optional separate log database connection |
+| `REDIS_CONN_STRING` | Redis connection string |
+| `SESSION_SECRET` | Persistent authentication secret; all nodes must use the same value |
+| `CRYPTO_SECRET` | Defaults to `SESSION_SECRET`; nodes sharing Redis must use the same effective value |
+| `SESSION_COOKIE_SECURE` | Set to `true` for an HTTPS console; enables Secure refresh cookies and strict refresh/logout origin checks |
+| `SESSION_COOKIE_TRUSTED_URL` | Required in Secure mode: comma-separated exact HTTPS origins, without paths or wildcards; leave unset for local HTTP |
+| `TRUSTED_PROXIES` | Trusted reverse-proxy IPs/CIDRs, or `none`; explicitly configure for your network |
 
-For detailed API documentation, please refer to [API Documentation](https://docs.newapi.pro/api):
+See the [environment example](./.env.example), [environment reference](https://docs.newapi.ai/en/docs/installation/config-maintenance/environment-variables), and [authentication and session guide](./docs/authentication.md) for full configuration. Configure container variables in Compose's `environment` or `env_file`; copying `.env.example` alone does not inject variables into the container.
 
-- [Chat API](https://docs.newapi.pro/api/openai-chat)
-- [Image API](https://docs.newapi.pro/api/openai-image)
-- [Rerank API](https://docs.newapi.pro/api/jinaai-rerank)
-- [Realtime API](https://docs.newapi.pro/api/openai-realtime)
-- [Claude Chat API (messages)](https://docs.newapi.pro/api/anthropic-chat)
+For production, put the console behind HTTPS and configure your reverse proxy for streaming and WebSocket upgrades. Persist and back up the database and mounted data. Multi-node deployments must share the main database and authentication secrets; separate Redis instances or in-memory rate limiters count limits independently per node. The session guide describes propagation behavior for each topology.
 
-## Related Projects
-- [One API](https://github.com/songquanpeng/one-api): Original project
-- [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy): Midjourney interface support
-- [chatnio](https://github.com/Deeptrain-Community/chatnio): Next-generation AI one-stop B/C-end solution
-- [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool): Query usage quota with key
+Pin an image version from [Releases](https://github.com/QuantumNous/new-api/releases), review its upgrade notes, and back up before upgrading. The `latest` tag follows published builds and can change; migrations and compatibility must be assessed for your existing installation.
 
-Other projects based on New API:
-- [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon): High-performance optimized version of New API
-- [VoAPI](https://github.com/VoAPI/VoAPI): Frontend beautified version based on New API
+<a id="development"></a>
 
-## Help and Support
+## Development and extensions
 
-If you have any questions, please refer to [Help and Support](https://docs.newapi.pro/support):
-- [Community Interaction](https://docs.newapi.pro/support/community-interaction)
-- [Issue Feedback](https://docs.newapi.pro/support/feedback-issues)
-- [FAQ](https://docs.newapi.pro/support/faq)
+The backend uses Go and Gin. The web console uses React 19, TypeScript, Rsbuild, TanStack, and Tailwind CSS 4. Use Bun for frontend dependencies and scripts; see [go.mod](./go.mod) for the Go language baseline and [Dockerfile](./Dockerfile) for the container build toolchain.
+
+Build the frontend before starting the backend, which embeds `web/dist`:
+
+```bash
+# Repository root
+cd web
+bun install --frozen-lockfile
+bun run build
+cd ..
+go run .
+```
+
+In a second terminal, start the frontend development server:
+
+```bash
+cd web
+bun run dev -- --port 5173
+```
+
+Open [http://localhost:5173](http://localhost:5173); the development server proxies API requests to the backend on port 3000. For a containerized development backend, see [docker-compose.dev.yml](./docker-compose.dev.yml) and the `make dev` target in [makefile](./makefile).
+
+| Location | Responsibility |
+| --- | --- |
+| `router/`, `middleware/`, `controller/` | HTTP routes, access checks, and API handlers |
+| `relay/` | Upstream adapters and request routing |
+| `service/`, `model/` | Business logic and persistence |
+| [relaykit/](./relaykit/README.md) | Independently buildable Go module for protocol DTOs and conversions |
+| [plugins/tasks/](./plugins/tasks/) | JavaScript task plugins; see [Task Plugin API v1](./docs/plugin-api/v1.md) for authoring and host boundaries |
+| `web/` | Web console; see [frontend conventions](./web/AGENTS.md) |
+| [electron/](./electron/README.md) | Desktop wrapper and packaging |
+
+Read [AGENTS.md](./AGENTS.md) before contributing. Run checks appropriate to your change, including `make test` for the Go modules and `bun check -b`, `bun run lint`, `bun run test`, and `bun run build` in `web/` for frontend changes. Changes to RelayKit must also pass `GOWORK=off go build ./...` from `relaykit/`.
+
+<a id="documentation"></a>
+
+## Documentation and community
+
+| Resource | Link |
+| --- | --- |
+| Official documentation | [Guides](https://docs.newapi.ai/en/docs) · [Installation](https://docs.newapi.ai/en/docs/installation) · [API reference](https://docs.newapi.ai/en/docs/api) |
+| Project exploration | [DeepWiki](https://deepwiki.com/QuantumNous/new-api) |
+| Questions and discussion | [FAQ](https://docs.newapi.ai/en/docs/support/faq) · [Community](https://docs.newapi.ai/en/docs/support/community-interaction) |
+| Bugs and feature requests | [GitHub Issues](https://github.com/QuantumNous/new-api/issues) |
+| Security reports | Follow the [security policy](./.github/SECURITY.md) for private reporting |
+
+For bug reports, include the version, deployment method, reproduction steps, and redacted logs. Documentation, translations, provider integrations, and focused regression tests are all welcome contributions.
+
+---
+
+## 🔗 Related Projects
+
+### Upstream Projects
+
+| Project | Description |
+|------|------|
+| [One API](https://github.com/songquanpeng/one-api) | Original project base |
+| [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourney interface support |
+
+### Supporting Tools
+
+| Project | Description |
+|------|------|
+| [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool) | Key quota query tool |
+| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API high-performance optimized version |
+
+---
+
+## 📜 License
+
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE).
+
+Additional terms under AGPLv3 Section 7 apply. Modified versions must preserve
+the author attribution notice `Frontend design and development by New API
+contributors.` in the appropriate legal notices and in any prominent about,
+legal, footer, or attribution location presented by the user interface.
+
+Modified versions that present a user interface must also preserve a visible
+link to the original project: <https://github.com/QuantumNous/new-api>.
+
+This is an open-source project developed based on [One API](https://github.com/songquanpeng/one-api) (MIT License).
+
+If your organization's policies do not permit the use of AGPLv3-licensed software, or if you wish to avoid the open-source obligations of AGPLv3, please contact us at: [support@quantumnous.com](mailto:support@quantumnous.com)
+
+See [NOTICE](./NOTICE) and [third-party licenses](./THIRD-PARTY-LICENSES.md) for attribution and dependency notices.
+
+---
 
 ## 🌟 Star History
 
+<div align="center">
+
 [![Star History Chart](https://api.star-history.com/svg?repos=Calcium-Ion/new-api&type=Date)](https://star-history.com/#Calcium-Ion/new-api&Date)
+
+</div>
+
+---
+
+<div align="center">
+
+### 💖 Thank you for using New API
+
+If this project is helpful to you, welcome to give us a ⭐️ Star！
+
+**[Official Documentation](https://docs.newapi.ai/en/docs)** • **[Issue Feedback](https://github.com/Calcium-Ion/new-api/issues)** • **[Latest Release](https://github.com/Calcium-Ion/new-api/releases)**
+
+<sub>Built with ❤️ by QuantumNous</sub>
+
+</div>

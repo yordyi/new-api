@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"github.com/bytedance/gopkg/cache/asynccache"
-	"github.com/golang-jwt/jwt"
-	"net/http"
 	"net/url"
-	relaycommon "one-api/relay/common"
 	"strings"
+
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
+
+	"github.com/bytedance/gopkg/cache/asynccache"
+	"github.com/golang-jwt/jwt/v5"
 
 	"fmt"
 	"time"
@@ -35,7 +37,12 @@ var Cache = asynccache.NewAsyncCache(asynccache.Options{
 })
 
 func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
-	cacheKey := fmt.Sprintf("access-token-%d", info.ChannelId)
+	var cacheKey string
+	if info.ChannelIsMultiKey {
+		cacheKey = fmt.Sprintf("access-token-%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
+	} else {
+		cacheKey = fmt.Sprintf("access-token-%d", info.ChannelId)
+	}
 	val, err := Cache.Get(cacheKey)
 	if err == nil {
 		return val.(string), nil
@@ -45,7 +52,7 @@ func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create signed JWT: %w", err)
 	}
-	newToken, err := exchangeJwtForAccessToken(signedJWT)
+	newToken, err := exchangeJwtForAccessToken(signedJWT, info.ChannelSetting.Proxy)
 	if err != nil {
 		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
 	}
@@ -96,20 +103,35 @@ func createSignedJWT(email, privateKeyPEM string) (string, error) {
 	return signedToken, nil
 }
 
-func exchangeJwtForAccessToken(signedJWT string) (string, error) {
+func AcquireAccessToken(creds Credentials, proxy string) (string, error) {
+	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to create signed JWT: %w", err)
+	}
+	return exchangeJwtForAccessToken(signedJWT, proxy)
+}
 
+// exchangeJwtForAccessToken trades a signed service-account JWT for an access
+// token at Google's OAuth endpoint. It goes through the channel proxy only and
+// always verifies the certificate; the channel's TLS setting does not apply.
+func exchangeJwtForAccessToken(signedJWT string, proxy string) (string, error) {
 	authURL := "https://www.googleapis.com/oauth2/v4/token"
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	data.Set("assertion", signedJWT)
 
-	resp, err := http.PostForm(authURL, data)
+	client, err := service.GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return "", fmt.Errorf("new proxy http client failed: %w", err)
+	}
+
+	resp, err := client.PostForm(authURL, data)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
@@ -117,6 +139,5 @@ func exchangeJwtForAccessToken(signedJWT string) (string, error) {
 	if accessToken, ok := result["access_token"].(string); ok {
 		return accessToken, nil
 	}
-
 	return "", fmt.Errorf("failed to get access token: %v", result)
 }

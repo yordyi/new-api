@@ -6,15 +6,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"one-api/dto"
-	"one-api/relay/channel"
-	"one-api/relay/common"
 	"time"
+
+	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Adaptor struct {
+}
+
+func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *common.RelayInfo, *dto.GeminiChatRequest) (any, error) {
+	//TODO implement me
+	return nil, errors.New("not implemented")
 }
 
 // ConvertAudioRequest implements channel.Adaptor.
@@ -95,11 +102,11 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *common.RelayInfo, requestBody 
 }
 
 // DoResponse implements channel.Adaptor.
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *common.RelayInfo) (usage any, err *dto.OpenAIErrorWithStatusCode) {
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *common.RelayInfo) (usage any, err *types.NewAPIError) {
 	if info.IsStream {
-		err, usage = cozeChatStreamHandler(c, resp, info)
+		usage, err = cozeChatStreamHandler(c, info, resp)
 	} else {
-		err, usage = cozeChatHandler(c, resp, info)
+		usage, err = cozeChatHandler(c, info, resp)
 	}
 	return
 }
@@ -116,7 +123,7 @@ func (a *Adaptor) GetModelList() []string {
 
 // GetRequestURL implements channel.Adaptor.
 func (a *Adaptor) GetRequestURL(info *common.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s/v3/chat", info.BaseUrl), nil
+	return fmt.Sprintf("%s/v3/chat", info.ChannelBaseUrl), nil
 }
 
 // Init implements channel.Adaptor.

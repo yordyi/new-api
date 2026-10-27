@@ -10,14 +10,14 @@ type CozeError struct {
 type CozeEnterMessage struct {
 	Role        string          `json:"role"`
 	Type        string          `json:"type,omitempty"`
-	Content     json.RawMessage `json:"content,omitempty"`
+	Content     any             `json:"content,omitempty"`
 	MetaData    json.RawMessage `json:"meta_data,omitempty"`
 	ContentType string          `json:"content_type,omitempty"`
 }
 
 type CozeChatRequest struct {
 	BotId              string             `json:"bot_id"`
-	UserId             string             `json:"user_id"`
+	UserId             json.RawMessage    `json:"user_id"`
 	AdditionalMessages []CozeEnterMessage `json:"additional_messages,omitempty"`
 	Stream             bool               `json:"stream,omitempty"`
 	CustomVariables    json.RawMessage    `json:"custom_variables,omitempty"`

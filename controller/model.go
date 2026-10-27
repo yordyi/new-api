@@ -2,19 +2,28 @@ package controller
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/http"
-	"one-api/common"
-	"one-api/constant"
-	"one-api/dto"
-	"one-api/model"
-	"one-api/relay"
-	"one-api/relay/channel/ai360"
-	"one-api/relay/channel/lingyiwanwu"
-	"one-api/relay/channel/minimax"
-	"one-api/relay/channel/moonshot"
-	relaycommon "one-api/relay/common"
-	relayconstant "one-api/relay/constant"
+	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel/ai360"
+	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
+	"github.com/QuantumNous/new-api/relay/channel/minimax"
+	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 )
 
 // https://platform.openai.com/docs/api-reference/models/list
@@ -23,30 +32,10 @@ var openAIModels []dto.OpenAIModels
 var openAIModelsMap map[string]dto.OpenAIModels
 var channelId2Models map[int][]string
 
-func getPermission() []dto.OpenAIModelPermission {
-	var permission []dto.OpenAIModelPermission
-	permission = append(permission, dto.OpenAIModelPermission{
-		Id:                 "modelperm-LwHkVFn8AcMItP432fKKDIKJ",
-		Object:             "model_permission",
-		Created:            1626777600,
-		AllowCreateEngine:  true,
-		AllowSampling:      true,
-		AllowLogprobs:      true,
-		AllowSearchIndices: false,
-		AllowView:          true,
-		AllowFineTuning:    false,
-		Organization:       "*",
-		Group:              nil,
-		IsBlocking:         false,
-	})
-	return permission
-}
-
 func init() {
 	// https://platform.openai.com/docs/models/model-endpoint-compatibility
-	permission := getPermission()
-	for i := 0; i < relayconstant.APITypeDummy; i++ {
-		if i == relayconstant.APITypeAIProxyLibrary {
+	for i := range constant.APITypeDummy {
+		if i == constant.APITypeAIProxyLibrary {
 			continue
 		}
 		adaptor := relay.GetAdaptor(i)
@@ -54,69 +43,51 @@ func init() {
 		modelNames := adaptor.GetModelList()
 		for _, modelName := range modelNames {
 			openAIModels = append(openAIModels, dto.OpenAIModels{
-				Id:         modelName,
-				Object:     "model",
-				Created:    1626777600,
-				OwnedBy:    channelName,
-				Permission: permission,
-				Root:       modelName,
-				Parent:     nil,
+				Id:      modelName,
+				Object:  "model",
+				Created: 1626777600,
+				OwnedBy: channelName,
 			})
 		}
 	}
 	for _, modelName := range ai360.ModelList {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:         modelName,
-			Object:     "model",
-			Created:    1626777600,
-			OwnedBy:    ai360.ChannelName,
-			Permission: permission,
-			Root:       modelName,
-			Parent:     nil,
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: ai360.ChannelName,
 		})
 	}
 	for _, modelName := range moonshot.ModelList {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:         modelName,
-			Object:     "model",
-			Created:    1626777600,
-			OwnedBy:    moonshot.ChannelName,
-			Permission: permission,
-			Root:       modelName,
-			Parent:     nil,
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: moonshot.ChannelName,
 		})
 	}
 	for _, modelName := range lingyiwanwu.ModelList {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:         modelName,
-			Object:     "model",
-			Created:    1626777600,
-			OwnedBy:    lingyiwanwu.ChannelName,
-			Permission: permission,
-			Root:       modelName,
-			Parent:     nil,
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: lingyiwanwu.ChannelName,
 		})
 	}
 	for _, modelName := range minimax.ModelList {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:         modelName,
-			Object:     "model",
-			Created:    1626777600,
-			OwnedBy:    minimax.ChannelName,
-			Permission: permission,
-			Root:       modelName,
-			Parent:     nil,
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: minimax.ChannelName,
 		})
 	}
 	for modelName, _ := range constant.MidjourneyModel2Action {
 		openAIModels = append(openAIModels, dto.OpenAIModels{
-			Id:         modelName,
-			Object:     "model",
-			Created:    1626777600,
-			OwnedBy:    "midjourney",
-			Permission: permission,
-			Root:       modelName,
-			Parent:     nil,
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: "midjourney",
 		})
 	}
 	openAIModelsMap = make(map[string]dto.OpenAIModels)
@@ -124,82 +95,224 @@ func init() {
 		openAIModelsMap[aiModel.Id] = aiModel
 	}
 	channelId2Models = make(map[int][]string)
-	for i := 1; i <= common.ChannelTypeDummy; i++ {
-		apiType, success := relayconstant.ChannelType2APIType(i)
-		if !success || apiType == relayconstant.APITypeAIProxyLibrary {
+	for i := 1; i <= constant.ChannelTypeDummy; i++ {
+		apiType, success := common.ChannelType2APIType(i)
+		if !success || apiType == constant.APITypeAIProxyLibrary {
+			if plugin, ok := jsplugin.DefaultRegistry.GetByChannelType(i); ok {
+				channelId2Models[i] = append([]string(nil), plugin.Meta.Models...)
+			}
 			continue
 		}
-		meta := &relaycommon.RelayInfo{ChannelType: i}
+		meta := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: i,
+		}}
 		adaptor := relay.GetAdaptor(apiType)
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
+		if len(channelId2Models[i]) == 0 {
+			if plugin, ok := jsplugin.DefaultRegistry.GetByChannelType(i); ok {
+				channelId2Models[i] = append([]string(nil), plugin.Meta.Models...)
+			}
+		}
 	}
+	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
+		return m.Id
+	})
 }
 
-func ListModels(c *gin.Context) {
-	userOpenAiModels := make([]dto.OpenAIModels, 0)
-	permission := getPermission()
+func channelOwnerName(channelType int) string {
+	apiType, success := common.ChannelType2APIType(channelType)
+	if !success {
+		return strings.ToLower(constant.GetChannelTypeName(channelType))
+	}
+	adaptor := relay.GetAdaptor(apiType)
+	if adaptor == nil {
+		return strings.ToLower(constant.GetChannelTypeName(channelType))
+	}
+	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{
+		ChannelType: channelType,
+	}})
+	if name := strings.TrimSpace(adaptor.GetChannelName()); name != "" {
+		return name
+	}
+	return strings.ToLower(constant.GetChannelTypeName(channelType))
+}
 
-	modelLimitEnable := c.GetBool("token_model_limit_enabled")
-	if modelLimitEnable {
-		s, ok := c.Get("token_model_limit")
-		var tokenModelLimit map[string]bool
-		if ok {
-			tokenModelLimit = s.(map[string]bool)
-		} else {
-			tokenModelLimit = map[string]bool{}
+func getPreferredModelOwners(modelNames []string, groups []string) map[string]string {
+	channelTypes, err := model.GetPreferredModelOwnerChannelTypes(modelNames, groups)
+	if err != nil {
+		common.SysLog(common.LogText("GetPreferredModelOwnerChannelTypes error: %v", err))
+		return map[string]string{}
+	}
+
+	ownerByChannelType := make(map[int]string)
+	owners := make(map[string]string, len(channelTypes))
+	for modelName, channelType := range channelTypes {
+		owner, ok := ownerByChannelType[channelType]
+		if !ok {
+			owner = channelOwnerName(channelType)
+			ownerByChannelType[channelType] = owner
 		}
-		for allowModel, _ := range tokenModelLimit {
-			if _, ok := openAIModelsMap[allowModel]; ok {
-				userOpenAiModels = append(userOpenAiModels, openAIModelsMap[allowModel])
-			} else {
-				userOpenAiModels = append(userOpenAiModels, dto.OpenAIModels{
-					Id:         allowModel,
-					Object:     "model",
-					Created:    1626777600,
-					OwnedBy:    "custom",
-					Permission: permission,
-					Root:       allowModel,
-					Parent:     nil,
-				})
-			}
+		if owner != "" {
+			owners[modelName] = owner
 		}
+	}
+	return owners
+}
+
+func buildOpenAIModel(modelName string, ownerByModel map[string]string) dto.OpenAIModels {
+	var oaiModel dto.OpenAIModels
+	if staticModel, ok := openAIModelsMap[modelName]; ok {
+		oaiModel = staticModel
 	} else {
-		userId := c.GetInt("id")
-		userGroup, err := model.GetUserGroup(userId, true)
+		oaiModel = dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: "custom",
+		}
+	}
+	if owner, ok := ownerByModel[modelName]; ok && owner != "" {
+		oaiModel.OwnedBy = owner
+	}
+	oaiModel.SupportedEndpointTypes = model.GetModelSupportEndpointTypes(modelName)
+	return oaiModel
+}
+
+type modelListGroups struct {
+	userGroup   string
+	tokenGroup  string
+	ownerGroups []string
+}
+
+func getModelListGroups(c *gin.Context) (modelListGroups, error) {
+	tokenGroup := common.GetContextKeyString(c, constant.ContextKeyTokenGroup)
+	userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+	if userGroup == "" && (tokenGroup == "" || tokenGroup == "auto") {
+		var err error
+		userGroup, err = model.GetUserGroup(c.GetInt("id"), false)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "get user group failed",
-			})
-			return
+			return modelListGroups{}, err
 		}
-		group := userGroup
-		tokenGroup := c.GetString("token_group")
-		if tokenGroup != "" {
-			group = tokenGroup
-		}
-		models := model.GetGroupModels(group)
-		for _, s := range models {
-			if _, ok := openAIModelsMap[s]; ok {
-				userOpenAiModels = append(userOpenAiModels, openAIModelsMap[s])
-			} else {
-				userOpenAiModels = append(userOpenAiModels, dto.OpenAIModels{
-					Id:         s,
-					Object:     "model",
-					Created:    1626777600,
-					OwnedBy:    "custom",
-					Permission: permission,
-					Root:       s,
-					Parent:     nil,
-				})
+	}
+
+	if tokenGroup == "auto" {
+		return modelListGroups{
+			userGroup:   userGroup,
+			tokenGroup:  tokenGroup,
+			ownerGroups: service.GetRequestAutoGroups(c, userGroup),
+		}, nil
+	}
+
+	group := userGroup
+	if tokenGroup != "" {
+		group = tokenGroup
+	}
+	return modelListGroups{
+		userGroup:   userGroup,
+		tokenGroup:  tokenGroup,
+		ownerGroups: []string{group},
+	}, nil
+}
+
+func ListModels(c *gin.Context, modelType int) {
+	acceptUnsetRatioModel := operation_setting.SelfUseModeEnabled
+	if !acceptUnsetRatioModel {
+		userId := c.GetInt("id")
+		if userId > 0 {
+			userSettings, _ := model.GetUserSetting(userId, false)
+			if userSettings.AcceptUnsetRatioModel {
+				acceptUnsetRatioModel = true
 			}
 		}
 	}
-	c.JSON(200, gin.H{
-		"success": true,
-		"data":    userOpenAiModels,
-	})
+
+	userModelNames := make([]string, 0)
+	groups, err := getModelListGroups(c)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "get user group failed",
+		})
+		return
+	}
+	ownerGroups := groups.ownerGroups
+	modelLimitEnable := common.GetContextKeyBool(c, constant.ContextKeyTokenModelLimitEnabled)
+	var tokenModelLimit map[string]bool
+	if modelLimitEnable {
+		s, ok := common.GetContextKey(c, constant.ContextKeyTokenModelLimit)
+		if ok {
+			tokenModelLimit, _ = s.(map[string]bool)
+		}
+		if tokenModelLimit == nil {
+			tokenModelLimit = map[string]bool{}
+		}
+	}
+	models := service.GetGroupsEnabledModels(ownerGroups)
+	for _, modelName := range models {
+		if modelLimitEnable {
+			matchingName := ratio_setting.RoutingMatchModelName(modelName)
+			if !tokenModelLimit[modelName] && !tokenModelLimit[matchingName] {
+				continue
+			}
+		}
+		if !acceptUnsetRatioModel && !helper.HasModelBillingConfig(modelName) {
+			continue
+		}
+		userModelNames = append(userModelNames, modelName)
+	}
+
+	ownerByModel := map[string]string{}
+	if len(ownerGroups) > 0 {
+		ownerByModel = getPreferredModelOwners(userModelNames, ownerGroups)
+	}
+	userOpenAiModels := make([]dto.OpenAIModels, 0, len(userModelNames))
+	for _, modelName := range userModelNames {
+		userOpenAiModels = append(userOpenAiModels, buildOpenAIModel(modelName, ownerByModel))
+	}
+
+	switch modelType {
+	case constant.ChannelTypeAnthropic:
+		useranthropicModels := make([]dto.AnthropicModel, len(userOpenAiModels))
+		for i, model := range userOpenAiModels {
+			useranthropicModels[i] = dto.AnthropicModel{
+				ID:          model.Id,
+				CreatedAt:   time.Unix(int64(model.Created), 0).UTC().Format(time.RFC3339),
+				DisplayName: model.Id,
+				Type:        "model",
+			}
+		}
+		firstID := ""
+		lastID := ""
+		if len(useranthropicModels) > 0 {
+			firstID = useranthropicModels[0].ID
+			lastID = useranthropicModels[len(useranthropicModels)-1].ID
+		}
+		c.JSON(200, gin.H{
+			"data":     useranthropicModels,
+			"first_id": firstID,
+			"has_more": false,
+			"last_id":  lastID,
+		})
+	case constant.ChannelTypeGemini:
+		userGeminiModels := make([]dto.GeminiModel, len(userOpenAiModels))
+		for i, model := range userOpenAiModels {
+			userGeminiModels[i] = dto.GeminiModel{
+				Name:        model.Id,
+				DisplayName: model.Id,
+			}
+		}
+		c.JSON(200, gin.H{
+			"models":        userGeminiModels,
+			"nextPageToken": nil,
+		})
+	default:
+		c.JSON(200, gin.H{
+			"success": true,
+			"data":    userOpenAiModels,
+			"object":  "list",
+		})
+	}
 }
 
 func ChannelListModels(c *gin.Context) {
@@ -210,9 +323,18 @@ func ChannelListModels(c *gin.Context) {
 }
 
 func DashboardListModels(c *gin.Context) {
+	modelsByChannel := make(map[int][]string, len(channelId2Models))
+	for channelType, models := range channelId2Models {
+		modelsByChannel[channelType] = append([]string(nil), models...)
+	}
+	for channelType := 1; channelType <= constant.ChannelTypeDummy; channelType++ {
+		if plugin, ok := jsplugin.DefaultRegistry.GetByChannelType(channelType); ok {
+			modelsByChannel[channelType] = append([]string(nil), plugin.Meta.Models...)
+		}
+	}
 	c.JSON(200, gin.H{
 		"success": true,
-		"data":    channelId2Models,
+		"data":    modelsByChannel,
 	})
 }
 
@@ -223,12 +345,22 @@ func EnabledListModels(c *gin.Context) {
 	})
 }
 
-func RetrieveModel(c *gin.Context) {
+func RetrieveModel(c *gin.Context, modelType int) {
 	modelId := c.Param("model")
 	if aiModel, ok := openAIModelsMap[modelId]; ok {
-		c.JSON(200, aiModel)
+		switch modelType {
+		case constant.ChannelTypeAnthropic:
+			c.JSON(200, dto.AnthropicModel{
+				ID:          aiModel.Id,
+				CreatedAt:   time.Unix(int64(aiModel.Created), 0).UTC().Format(time.RFC3339),
+				DisplayName: aiModel.Id,
+				Type:        "model",
+			})
+		default:
+			c.JSON(200, aiModel)
+		}
 	} else {
-		openAIError := dto.OpenAIError{
+		openAIError := types.OpenAIError{
 			Message: fmt.Sprintf("The model '%s' does not exist", modelId),
 			Type:    "invalid_request_error",
 			Param:   "model",

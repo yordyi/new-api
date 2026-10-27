@@ -1,157 +1,582 @@
 package ollama
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
-	"one-api/dto"
-	"one-api/service"
 	"strings"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
+
+	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 )
 
-func requestOpenAI2Ollama(request dto.GeneralOpenAIRequest) (*OllamaRequest, error) {
-	messages := make([]dto.Message, 0, len(request.Messages))
-	for _, message := range request.Messages {
-		if !message.IsStringContent() {
-			mediaMessages := message.ParseContent()
-			for j, mediaMessage := range mediaMessages {
-				if mediaMessage.Type == dto.ContentTypeImageURL {
-					imageUrl := mediaMessage.GetImageMedia()
-					// check if not base64
-					if strings.HasPrefix(imageUrl.Url, "http") {
-						fileData, err := service.GetFileBase64FromUrl(imageUrl.Url)
+func toOllamaResponseFormat(responseFormat *dto.ResponseFormat) (any, error) {
+	if responseFormat == nil {
+		return nil, nil
+	}
+	switch responseFormat.Type {
+	case "json", "json_object":
+		return "json", nil
+	case "json_schema":
+		if len(responseFormat.JsonSchema) == 0 {
+			return nil, nil
+		}
+		// The raw schema keeps the client's property order, which the
+		// model fills the properties in.
+		var jsonSchema struct {
+			Schema common.RawMessage `json:"schema"`
+		}
+		if err := common.Unmarshal(responseFormat.JsonSchema, &jsonSchema); err != nil {
+			return nil, fmt.Errorf("invalid ollama response format: %w", err)
+		}
+		if len(jsonSchema.Schema) == 0 || common.GetJsonType(jsonSchema.Schema) == "null" {
+			return nil, nil
+		}
+		return jsonSchema.Schema, nil
+	default:
+		return nil, nil
+	}
+}
+
+func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*OllamaChatRequest, error) {
+	think := r.Think
+	if len(think) == 0 {
+		effort := r.ReasoningEffort
+		if len(r.Reasoning) > 0 {
+			var reasoning dto.Reasoning
+			if err := common.Unmarshal(r.Reasoning, &reasoning); err != nil {
+				return nil, fmt.Errorf("invalid ollama reasoning: %w", err)
+			}
+			effort = lo.CoalesceOrEmpty(reasoning.Effort, effort)
+		}
+		if effort != "" {
+			var thinkValue any
+			switch effort {
+			case "none":
+				thinkValue = false
+			case "low", "medium", "high", "max":
+				thinkValue = effort
+			default:
+				return nil, fmt.Errorf("unsupported ollama reasoning effort %q", effort)
+			}
+			var err error
+			think, err = common.Marshal(thinkValue)
+			if err != nil {
+				return nil, fmt.Errorf("marshal ollama think: %w", err)
+			}
+		}
+	}
+
+	chatReq := &OllamaChatRequest{
+		Model:   r.Model,
+		Stream:  lo.FromPtrOr(r.Stream, false),
+		Options: map[string]any{},
+		Think:   think,
+	}
+	format, err := toOllamaResponseFormat(r.ResponseFormat)
+	if err != nil {
+		return nil, err
+	}
+	chatReq.Format = format
+
+	// options mapping
+	if r.Temperature != nil {
+		chatReq.Options["temperature"] = r.Temperature
+	}
+	if r.TopP != nil {
+		chatReq.Options["top_p"] = lo.FromPtr(r.TopP)
+	}
+	if r.TopK != nil {
+		chatReq.Options["top_k"] = lo.FromPtr(r.TopK)
+	}
+	if r.FrequencyPenalty != nil {
+		chatReq.Options["frequency_penalty"] = lo.FromPtr(r.FrequencyPenalty)
+	}
+	if r.PresencePenalty != nil {
+		chatReq.Options["presence_penalty"] = lo.FromPtr(r.PresencePenalty)
+	}
+	if r.Seed != nil {
+		chatReq.Options["seed"] = int(lo.FromPtr(r.Seed))
+	}
+	if mt := r.GetMaxTokens(); mt != 0 {
+		chatReq.Options["num_predict"] = int(mt)
+	}
+
+	if r.Stop != nil {
+		switch v := r.Stop.(type) {
+		case string:
+			chatReq.Options["stop"] = []string{v}
+		case []string:
+			chatReq.Options["stop"] = v
+		case []any:
+			arr := lo.FilterMap(v, func(item any, _ int) (string, bool) {
+				value, ok := item.(string)
+				return value, ok
+			})
+			if len(arr) > 0 {
+				chatReq.Options["stop"] = arr
+			}
+		}
+	}
+
+	if len(r.Tools) > 0 {
+		chatReq.Tools = lo.Map(r.Tools, func(tool dto.ToolCallRequest, _ int) OllamaTool {
+			return OllamaTool{
+				Type: "function",
+				Function: OllamaToolFunction{
+					Name:        tool.Function.Name,
+					Description: tool.Function.Description,
+					Parameters:  tool.Function.Parameters,
+				},
+			}
+		})
+	}
+
+	chatReq.Messages = make([]OllamaChatMessage, 0, len(r.Messages))
+	toolNamesByCallID := make(map[string]string)
+	for _, m := range r.Messages {
+		var textBuilder strings.Builder
+		var images []string
+		if m.IsStringContent() {
+			textBuilder.WriteString(m.StringContent())
+		} else {
+			parts := m.ParseContent()
+			for _, part := range parts {
+				if part.Type == dto.ContentTypeImageURL {
+					source := part.ToFileSource()
+					if source != nil {
+						base64Data, _, err := service.GetBase64Data(c, source, "fetch image for ollama chat")
 						if err != nil {
 							return nil, err
 						}
-						imageUrl.Url = fmt.Sprintf("data:%s;base64,%s", fileData.MimeType, fileData.Base64Data)
+						if base64Data != "" {
+							images = append(images, base64Data)
+						}
 					}
-					mediaMessage.ImageUrl = imageUrl
-					mediaMessages[j] = mediaMessage
+				} else if part.Type == dto.ContentTypeText {
+					textBuilder.WriteString(part.Text)
 				}
 			}
-			message.SetMediaContent(mediaMessages)
 		}
-		messages = append(messages, dto.Message{
-			Role:       message.Role,
-			Content:    message.Content,
-			ToolCalls:  message.ToolCalls,
-			ToolCallId: message.ToolCallId,
-		})
+		cm := OllamaChatMessage{Role: m.Role, Content: textBuilder.String()}
+		if len(images) > 0 {
+			cm.Images = images
+		}
+		if m.Role == "assistant" {
+			if reasoning, ok := lo.Coalesce(m.ReasoningContent, m.Reasoning); ok {
+				thinking, err := common.Marshal(*reasoning)
+				if err != nil {
+					return nil, fmt.Errorf("marshal ollama thinking: %w", err)
+				}
+				cm.Thinking = thinking
+			}
+		}
+		if m.Role == "tool" {
+			cm.ToolCallID = m.ToolCallId
+			cm.ToolName = lo.CoalesceOrEmpty(lo.FromPtr(m.Name), toolNamesByCallID[m.ToolCallId])
+		}
+		if m.ToolCalls != nil && len(m.ToolCalls) > 0 {
+			parsed := m.ParseToolCalls()
+			if len(parsed) > 0 {
+				calls := make([]OllamaToolCall, 0, len(parsed))
+				for _, tc := range parsed {
+					var args any
+					if tc.Function.Arguments != "" {
+						_ = common.Unmarshal([]byte(tc.Function.Arguments), &args)
+					}
+					if args == nil {
+						args = map[string]any{}
+					}
+					oc := OllamaToolCall{ID: tc.ID}
+					oc.Function.Name = tc.Function.Name
+					oc.Function.Arguments = args
+					calls = append(calls, oc)
+					if tc.ID != "" {
+						toolNamesByCallID[tc.ID] = tc.Function.Name
+					}
+				}
+				cm.ToolCalls = calls
+			}
+		}
+		chatReq.Messages = append(chatReq.Messages, cm)
 	}
-	str, ok := request.Stop.(string)
-	var Stop []string
-	if ok {
-		Stop = []string{str}
-	} else {
-		Stop, _ = request.Stop.([]string)
-	}
-	return &OllamaRequest{
-		Model:            request.Model,
-		Messages:         messages,
-		Stream:           request.Stream,
-		Temperature:      request.Temperature,
-		Seed:             request.Seed,
-		Topp:             request.TopP,
-		TopK:             request.TopK,
-		Stop:             Stop,
-		Tools:            request.Tools,
-		MaxTokens:        request.MaxTokens,
-		ResponseFormat:   request.ResponseFormat,
-		FrequencyPenalty: request.FrequencyPenalty,
-		PresencePenalty:  request.PresencePenalty,
-		Prompt:           request.Prompt,
-		StreamOptions:    request.StreamOptions,
-		Suffix:           request.Suffix,
-	}, nil
+	return chatReq, nil
 }
 
-func requestOpenAI2Embeddings(request dto.EmbeddingRequest) *OllamaEmbeddingRequest {
-	return &OllamaEmbeddingRequest{
-		Model: request.Model,
-		Input: request.ParseInput(),
-		Options: &Options{
-			Seed:             int(request.Seed),
-			Temperature:      request.Temperature,
-			TopP:             request.TopP,
-			FrequencyPenalty: request.FrequencyPenalty,
-			PresencePenalty:  request.PresencePenalty,
-		},
+// openAIToGenerate converts OpenAI completions request to Ollama generate
+func openAIToGenerate(c *gin.Context, r *dto.GeneralOpenAIRequest) (*OllamaGenerateRequest, error) {
+	gen := &OllamaGenerateRequest{
+		Model:   r.Model,
+		Stream:  lo.FromPtrOr(r.Stream, false),
+		Options: map[string]any{},
+		Think:   r.Think,
 	}
-}
-
-func ollamaEmbeddingHandler(c *gin.Context, resp *http.Response, promptTokens int, model string, relayMode int) (*dto.OpenAIErrorWithStatusCode, *dto.Usage) {
-	var ollamaEmbeddingResponse OllamaEmbeddingResponse
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return service.OpenAIErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
-	}
-	err = resp.Body.Close()
-	if err != nil {
-		return service.OpenAIErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
-	}
-	err = json.Unmarshal(responseBody, &ollamaEmbeddingResponse)
-	if err != nil {
-		return service.OpenAIErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
-	}
-	if ollamaEmbeddingResponse.Error != "" {
-		return service.OpenAIErrorWrapper(err, "ollama_error", resp.StatusCode), nil
-	}
-	flattenedEmbeddings := flattenEmbeddings(ollamaEmbeddingResponse.Embedding)
-	data := make([]dto.OpenAIEmbeddingResponseItem, 0, 1)
-	data = append(data, dto.OpenAIEmbeddingResponseItem{
-		Embedding: flattenedEmbeddings,
-		Object:    "embedding",
-	})
-	usage := &dto.Usage{
-		TotalTokens:      promptTokens,
-		CompletionTokens: 0,
-		PromptTokens:     promptTokens,
-	}
-	embeddingResponse := &dto.OpenAIEmbeddingResponse{
-		Object: "list",
-		Data:   data,
-		Model:  model,
-		Usage:  *usage,
-	}
-	doResponseBody, err := json.Marshal(embeddingResponse)
-	if err != nil {
-		return service.OpenAIErrorWrapper(err, "marshal_response_body_failed", http.StatusInternalServerError), nil
-	}
-	resp.Body = io.NopCloser(bytes.NewBuffer(doResponseBody))
-	// We shouldn't set the header before we parse the response body, because the parse part may fail.
-	// And then we will have to send an error response, but in this case, the header has already been set.
-	// So the httpClient will be confused by the response.
-	// For example, Postman will report error, and we cannot check the response at all.
-	// Copy headers
-	for k, v := range resp.Header {
-		// 删除任何现有的相同头部，以防止重复添加头部
-		c.Writer.Header().Del(k)
-		for _, vv := range v {
-			c.Writer.Header().Add(k, vv)
+	// Prompt may be in r.Prompt (string or []any)
+	if r.Prompt != nil {
+		switch v := r.Prompt.(type) {
+		case string:
+			gen.Prompt = v
+		case []any:
+			var sb strings.Builder
+			for _, it := range v {
+				if s, ok := it.(string); ok {
+					sb.WriteString(s)
+				}
+			}
+			gen.Prompt = sb.String()
+		default:
+			gen.Prompt = fmt.Sprintf("%v", r.Prompt)
 		}
 	}
-	// reset content length
-	c.Writer.Header().Del("Content-Length")
-	c.Writer.Header().Set("Content-Length", fmt.Sprintf("%d", len(doResponseBody)))
-	c.Writer.WriteHeader(resp.StatusCode)
-	_, err = io.Copy(c.Writer, resp.Body)
-	if err != nil {
-		return service.OpenAIErrorWrapper(err, "copy_response_body_failed", http.StatusInternalServerError), nil
+	if r.Suffix != nil {
+		if s, ok := r.Suffix.(string); ok {
+			gen.Suffix = s
+		}
 	}
-	err = resp.Body.Close()
+	format, err := toOllamaResponseFormat(r.ResponseFormat)
 	if err != nil {
-		return service.OpenAIErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
+		return nil, err
 	}
-	return nil, usage
+	gen.Format = format
+	if r.Temperature != nil {
+		gen.Options["temperature"] = r.Temperature
+	}
+	if r.TopP != nil {
+		gen.Options["top_p"] = lo.FromPtr(r.TopP)
+	}
+	if r.TopK != nil {
+		gen.Options["top_k"] = lo.FromPtr(r.TopK)
+	}
+	if r.FrequencyPenalty != nil {
+		gen.Options["frequency_penalty"] = lo.FromPtr(r.FrequencyPenalty)
+	}
+	if r.PresencePenalty != nil {
+		gen.Options["presence_penalty"] = lo.FromPtr(r.PresencePenalty)
+	}
+	if r.Seed != nil {
+		gen.Options["seed"] = int(lo.FromPtr(r.Seed))
+	}
+	if mt := r.GetMaxTokens(); mt != 0 {
+		gen.Options["num_predict"] = int(mt)
+	}
+	if r.Stop != nil {
+		switch v := r.Stop.(type) {
+		case string:
+			gen.Options["stop"] = []string{v}
+		case []string:
+			gen.Options["stop"] = v
+		case []any:
+			arr := lo.FilterMap(v, func(item any, _ int) (string, bool) {
+				value, ok := item.(string)
+				return value, ok
+			})
+			if len(arr) > 0 {
+				gen.Options["stop"] = arr
+			}
+		}
+	}
+	return gen, nil
 }
 
-func flattenEmbeddings(embeddings [][]float64) []float64 {
-	flattened := []float64{}
-	for _, row := range embeddings {
-		flattened = append(flattened, row...)
+func requestOpenAI2Embeddings(r dto.EmbeddingRequest) *OllamaEmbeddingRequest {
+	opts := map[string]any{}
+	if r.Temperature != nil {
+		opts["temperature"] = r.Temperature
 	}
-	return flattened
+	if r.TopP != nil {
+		opts["top_p"] = lo.FromPtr(r.TopP)
+	}
+	if r.FrequencyPenalty != nil {
+		opts["frequency_penalty"] = lo.FromPtr(r.FrequencyPenalty)
+	}
+	if r.PresencePenalty != nil {
+		opts["presence_penalty"] = lo.FromPtr(r.PresencePenalty)
+	}
+	if r.Seed != nil {
+		opts["seed"] = int(lo.FromPtr(r.Seed))
+	}
+	dimensions := lo.FromPtrOr(r.Dimensions, 0)
+	if r.Dimensions != nil {
+		opts["dimensions"] = dimensions
+	}
+	input := r.ParseInput()
+	if len(input) == 1 {
+		return &OllamaEmbeddingRequest{Model: r.Model, Input: input[0], Options: opts, Dimensions: dimensions}
+	}
+	return &OllamaEmbeddingRequest{Model: r.Model, Input: input, Options: opts, Dimensions: dimensions}
+}
+
+func ollamaEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	var oResp OllamaEmbeddingResponse
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	service.CloseResponseBodyGracefully(resp)
+	if err = common.Unmarshal(body, &oResp); err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	if oResp.Error != "" {
+		return nil, types.NewOpenAIError(fmt.Errorf("ollama error: %s", oResp.Error), types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+	data := make([]dto.OpenAIEmbeddingResponseItem, 0, len(oResp.Embeddings))
+	for i, emb := range oResp.Embeddings {
+		data = append(data, dto.OpenAIEmbeddingResponseItem{Index: i, Object: "embedding", Embedding: emb})
+	}
+	usage := &dto.Usage{PromptTokens: oResp.PromptEvalCount, CompletionTokens: 0, TotalTokens: oResp.PromptEvalCount}
+	embResp := &dto.OpenAIEmbeddingResponse{Object: "list", Data: data, Model: info.UpstreamModelName, Usage: *usage}
+	out, _ := common.Marshal(embResp)
+	service.IOCopyBytesGracefully(c, resp, out)
+	return usage, nil
+}
+
+func FetchOllamaModels(baseURL, apiKey string) ([]OllamaModel, error) {
+	url := fmt.Sprintf("%s/api/tags", baseURL)
+
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Ollama 通常不需要 Bearer token，但为了兼容性保留
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("server returned error %d: %s", response.StatusCode, string(body))
+	}
+
+	var tagsResponse OllamaTagsResponse
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	err = common.Unmarshal(body, &tagsResponse)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	return tagsResponse.Models, nil
+}
+
+// 拉取 Ollama 模型 (非流式)
+func PullOllamaModel(baseURL, apiKey, modelName string) error {
+	url := fmt.Sprintf("%s/api/pull", baseURL)
+
+	pullRequest := OllamaPullRequest{
+		Name:   modelName,
+		Stream: false, // 非流式，简化处理
+	}
+
+	requestBody, err := common.Marshal(pullRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	client := &http.Client{
+		Timeout: 30 * 60 * 1000 * time.Millisecond, // 30分钟超时，支持大模型
+	}
+	request, err := http.NewRequest("POST", url, strings.NewReader(string(requestBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("request failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("failed to pull model, status %d: %s", response.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// 流式拉取 Ollama 模型 (支持进度回调)
+func PullOllamaModelStream(baseURL, apiKey, modelName string, progressCallback func(OllamaPullResponse)) error {
+	url := fmt.Sprintf("%s/api/pull", baseURL)
+
+	pullRequest := OllamaPullRequest{
+		Name:   modelName,
+		Stream: true, // 启用流式
+	}
+
+	requestBody, err := common.Marshal(pullRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	client := &http.Client{
+		Timeout: 60 * 60 * 1000 * time.Millisecond, // 1小时超时，支持超大模型
+	}
+	request, err := http.NewRequest("POST", url, strings.NewReader(string(requestBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("request failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("failed to pull model, status %d: %s", response.StatusCode, string(body))
+	}
+
+	// 读取流式响应
+	scanner := helper.NewStreamScanner(response.Body)
+	successful := false
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		var pullResponse OllamaPullResponse
+		if err := common.Unmarshal([]byte(line), &pullResponse); err != nil {
+			continue // 忽略解析失败的行
+		}
+
+		if progressCallback != nil {
+			progressCallback(pullResponse)
+		}
+
+		// 检查是否出现错误或完成
+		if strings.EqualFold(pullResponse.Status, "error") {
+			return fmt.Errorf("failed to pull model: %s", strings.TrimSpace(line))
+		}
+		if strings.EqualFold(pullResponse.Status, "success") {
+			successful = true
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("failed to read stream response: %v", err)
+	}
+
+	if !successful {
+		return fmt.Errorf("model pull did not complete: no success status received")
+	}
+
+	return nil
+}
+
+// 删除 Ollama 模型
+func DeleteOllamaModel(baseURL, apiKey, modelName string) error {
+	url := fmt.Sprintf("%s/api/delete", baseURL)
+
+	deleteRequest := OllamaDeleteRequest{
+		Name: modelName,
+	}
+
+	requestBody, err := common.Marshal(deleteRequest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	client := &http.Client{}
+	request, err := http.NewRequest("DELETE", url, strings.NewReader(string(requestBody)))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("request failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("failed to delete model, status %d: %s", response.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+func FetchOllamaVersion(baseURL, apiKey string) (string, error) {
+	trimmedBase := strings.TrimRight(baseURL, "/")
+	if trimmedBase == "" {
+		return "", fmt.Errorf("baseURL is empty")
+	}
+
+	url := fmt.Sprintf("%s/api/version", trimmedBase)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	request, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response: %v", err)
+	}
+
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to query version, status %d: %s", response.StatusCode, string(body))
+	}
+
+	var versionResp struct {
+		Version string `json:"version"`
+	}
+
+	if err := common.Unmarshal(body, &versionResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if versionResp.Version == "" {
+		return "", fmt.Errorf("no version information returned")
+	}
+
+	return versionResp.Version, nil
 }
